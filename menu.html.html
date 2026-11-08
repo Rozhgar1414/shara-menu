@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>مینیۆی داواکاری کڕیار - فڕۆشگای شارا</title>
+    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a73e8;
+            --success: #34a853;
+            --dark: #202124;
+            --danger: #ea4335;
+        }
+        * { box-sizing: border-box; font-family: 'Vazirmatn', sans-serif; margin: 0; padding: 0; }
+        body { background-color: #f4f6f9; color: var(--dark); padding: 15px; }
+        
+        header { background: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        h1 { color: var(--primary); font-size: 20px; margin-bottom: 5px; }
+        p { font-size: 12px; color: #64748b; }
+
+        .min-order-alert { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; padding: 10px; border-radius: 6px; text-align: center; font-size: 13px; font-weight: bold; margin-bottom: 15px; }
+
+        .products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 12px; margin-bottom: 90px; }
+        .product-card { background: white; border-radius: 8px; border: 1px solid #e2e8f0; padding: 10px; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; }
+        .product-card img { width: 100%; height: 90px; object-fit: cover; border-radius: 6px; margin-bottom: 8px; background: #eee; }
+        .product-card h3 { font-size: 14px; margin-bottom: 5px; color: var(--dark); }
+        .product-card .price { font-size: 13px; font-weight: bold; color: var(--success); margin-bottom: 8px; }
+        
+        button { background: var(--primary); color: white; border: none; padding: 8px; border-radius: 4px; font-size: 13px; font-weight: bold; cursor: pointer; width: 100%; }
+        
+        .cart-bar { position: fixed; bottom: 0; right: 0; left: 0; background: white; padding: 12px 20px; border-top: 1px solid #ccc; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 1000; }
+        .btn-order { background: var(--success); width: auto; padding: 10px 20px; font-size: 14px; }
+        .btn-order:disabled { background: #a5d6a7; cursor: not-allowed; }
+
+        .modal { display: none; position: fixed; top: 0; right: 0; left: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 2000; justify-content: center; align-items: center; padding: 15px; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 100%; max-width: 350px; display: flex; flex-direction: column; gap: 10px; }
+        .modal-content input, .modal-content textarea { padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; text-align: right; width: 100%; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1 id="shopTitle">🛒 مینیۆی فڕۆشگای شارا</h1>
+        <p>کاڵاکەی خۆت هەڵبژێرە و داواکارییەکەت بنێرە</p>
+    </header>
+
+    <div id="minOrderBox" class="min-order-alert" style="display: none;">
+        ⚠️ ئاگاداری: کەمترین بڕی داواکاری <span id="minOrderText">0</span> دینارە!
+    </div>
+
+    <div class="products-grid" id="menuProductsGrid"></div>
+
+    <div class="cart-bar">
+        <div>
+            سەبەتە: <span id="cartCount">0</span> دانە<br>
+            کۆی گشتی: <span id="cartTotal" style="color:var(--success); font-weight:bold;">0</span> د.ع
+        </div>
+        <button class="btn-order" id="btnOpenOrder" onclick="openOrderModal()">📥 ناردنی داواکاری</button>
+    </div>
+
+    <!-- پەنجەرەی داواکاری (Modal بە تێبینی) -->
+    <div class="modal" id="orderModal">
+        <div class="modal-content">
+            <h3>تۆمارکردنی زانیاری کڕیار</h3>
+            <input type="text" id="custName" placeholder="ناوی تەواوی خۆت...">
+            <input type="tel" id="custPhone" placeholder="ژمارەی مۆبایل (0750...)">
+            <input type="text" id="custAddress" placeholder="ناونیشان (شاری/گەڕەک)...">
+            <textarea id="custNote" rows="3" placeholder="تێبینییەکەت لێرە بنووسە (ئەگەر هەتە)..."></textarea>
+            
+            <button class="btn-success" onclick="submitOrder()" style="margin-top: 5px;">پەسەندکردن و ناردن ✅</button>
+            <button style="background:var(--danger);" onclick="closeOrderModal()">پەشیمانبوونەوە ❌</button>
+        </div>
+    </div>
+
+    <script>
+        let products = JSON.parse(localStorage.getItem('shara_products')) || [];
+        let appSettings = JSON.parse(localStorage.getItem('shara_settings')) || {};
+        let customerCart = [];
+
+        if (appSettings.storeName) document.getElementById('shopTitle').innerText = "🛒 مینیۆی " + appSettings.storeName;
+
+        const isMinOrderEnabled = appSettings.minOrderEnable === 'true';
+        const minOrderAmount = parseFloat(appSettings.minOrderAmount) || 0;
+
+        if (isMinOrderEnabled && minOrderAmount > 0) {
+            document.getElementById('minOrderBox').style.display = 'block';
+            document.getElementById('minOrderText').innerText = minOrderAmount.toLocaleString();
+        }
+
+        function renderMenuProducts() {
+            const grid = document.getElementById('menuProductsGrid');
+            grid.innerHTML = '';
+
+            if (products.length === 0) {
+                grid.innerHTML = '<p style="grid-column: 1/-1; text-align:center; padding:20px; color:#777;">هیچ کاڵایەک لە کۆگادا نییە!</p>';
+                return;
+            }
+
+            products.forEach((p) => {
+                const img = p.image ? p.image : 'https://via.placeholder.com/150?text=No+Image';
+                grid.innerHTML += `
+                    <div class="product-card">
+                        <div>
+                            <img src="${img}">
+                            <h3>${p.name}</h3>
+                            <div class="price">${p.price.toLocaleString()} د.ع</div>
+                        </div>
+                        <button onclick="addToCustomerCart('${p.barcode}')">➕ زیادکردن</button>
+                    </div>`;
+            });
+        }
+
+        function addToCustomerCart(barcode) {
+            const product = products.find(p => p.barcode === barcode);
+            if (!product) return;
+            const existing = customerCart.find(item => item.barcode === barcode);
+            if (existing) existing.qty++;
+            else customerCart.push({ ...product, qty: 1 });
+            updateCartBar();
+        }
+
+        function updateCartBar() {
+            const totalCount = customerCart.reduce((sum, i) => sum + i.qty, 0);
+            const totalPrice = customerCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            document.getElementById('cartCount').innerText = totalCount;
+            document.getElementById('cartTotal').innerText = totalPrice.toLocaleString();
+
+            const btn = document.getElementById('btnOpenOrder');
+            if (isMinOrderEnabled && totalPrice < minOrderAmount) {
+                btn.disabled = true;
+                btn.innerText = `کەمترە لە ${minOrderAmount.toLocaleString()}`;
+            } else {
+                btn.disabled = false;
+                btn.innerText = "📥 ناردنی داواکاری";
+            }
+        }
+
+        function openOrderModal() {
+            const totalPrice = customerCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+            if (customerCart.length === 0) return alert('سەبەتەکەت بەتاڵە!');
+            if (isMinOrderEnabled && totalPrice < minOrderAmount) {
+                return alert(`ناتوانیت پسوڵە بنێریت! بڕی داواکاری لە ${minOrderAmount.toLocaleString()} دینار کەمترە.`);
+            }
+            document.getElementById('orderModal').style.display = 'flex';
+        }
+
+        function closeOrderModal() {
+            document.getElementById('orderModal').style.display = 'none';
+        }
+
+        function submitOrder() {
+            const name = document.getElementById('custName').value.trim();
+            const phone = document.getElementById('custPhone').value.trim();
+            const address = document.getElementById('custAddress').value.trim();
+            const note = document.getElementById('custNote').value.trim();
+
+            if (!name || !phone) return alert('تکایە ناو و ژمارەی مۆبایل بنووسە!');
+
+            const totalPrice = customerCart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+
+            const newOrder = {
+                id: Date.now(),
+                customer: name,
+                phone: phone,
+                address: address || 'دیاری نەکراوە',
+                note: note || '',
+                items: customerCart,
+                total: totalPrice,
+                date: new Date().toLocaleString()
+            };
+
+            let incomingOrders = JSON.parse(localStorage.getItem('shara_incoming_orders')) || [];
+            incomingOrders.push(newOrder);
+            localStorage.setItem('shara_incoming_orders', JSON.stringify(incomingOrders));
+
+            alert('داواکارییەکەت بە سەرکەوتوویی نێردرا بۆ کاشێر!');
+            customerCart = [];
+            updateCartBar();
+            closeOrderModal();
+            document.getElementById('custName').value = '';
+            document.getElementById('custPhone').value = '';
+            document.getElementById('custAddress').value = '';
+            document.getElementById('custNote').value = '';
+        }
+
+        renderMenuProducts();
+    </script>
+</body>
+</html>
+git remote add origin https://github.com/Rozhgar1414/shara-menu.git
+git branch -M main
+git push -u origin main
